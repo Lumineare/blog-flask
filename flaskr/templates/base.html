@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+  <title>{% block title %}{% endblock %} - Flaskr</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="navbar-brand">
+      <h1><a href="{{ url_for('index') }}">BUGCHAT</a></h1>
+    </div>
+    <button class="navbar-toggle" id="navbarToggle">
+      <span class="navbar-toggle-icon">☰</span>
+    </button>
+    <div class="navbar-menu" id="navbarMenu">
+      <ul>
+        {% if g.user %}
+          <li><span class="username">{{ g.user['username'] }}</span></li>
+          <li><a href="{{ url_for('auth.logout') }}">Log Out</a></li>
+        {% else %}
+          <li><a href="{{ url_for('auth.register') }}">Register</a></li>
+          <li><a href="{{ url_for('auth.login') }}">Log In</a></li>
+        {% endif %}
+      </ul>
+    </div>
+  </nav>
+
+  <section class="content">
+    <header>
+      {% block header %}{% endblock %}
+    </header>
+    {% for message in get_flashed_messages() %}
+      <div class="flash">{{ message }}</div>
+    {% endfor %}
+    {% block content %}{% endblock %}
+  </section>
+
+  <!-- Image Modal/Lightbox -->
+  <div id="imageModal" class="modal">
+    <div class="modal-content">
+      <img id="modalImage" class="modal-img">
+      <button id="closeModal" class="modal-close-btn">Kembali</button>
+    </div>
+  </div>
+
+  <script>
+    // Toggle mobile navigation
+    document.addEventListener('DOMContentLoaded', function() {
+      const navbarToggle = document.getElementById('navbarToggle');
+      const navbarMenu = document.getElementById('navbarMenu');
+      
+      if (navbarToggle) {
+        navbarToggle.addEventListener('click', function() {
+          navbarMenu.classList.toggle('active');
+        });
+      }
+      
+      // Get the modal
+      const modal = document.getElementById('imageModal');
+      const modalImg = document.getElementById('modalImage');
+      const closeBtn = document.getElementById('closeModal');
+      
+      // Set up click handlers for thumbnail images
+      const thumbnails = document.querySelectorAll('.thumbnail-img');
+      thumbnails.forEach(function(thumbnail) {
+        thumbnail.addEventListener('click', function() {
+          openModal(this.getAttribute('data-full-img'));
+        });
+      });
+      
+      // Close modal when clicking the close button
+      if (closeBtn) {
+        closeBtn.onclick = function() {
+          modal.style.display = "none";
+        }
+      }
+      
+      // Close modal when clicking outside the image
+      window.onclick = function(event) {
+        if (event.target == modal) {
+          modal.style.display = "none";
+        }
+      }
+    });
+    
+    // Function to open modal
+    function openModal(imgSrc) {
+      const modal = document.getElementById('imageModal');
+      const modalImg = document.getElementById('modalImage');
+      modal.style.display = "block";
+      modalImg.src = imgSrc;
+    }
+  </script>
+</body>
+</html>

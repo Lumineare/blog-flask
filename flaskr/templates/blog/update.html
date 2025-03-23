@@ -1,0 +1,42 @@
+{% extends 'base.html' %}
+
+{% block header %}
+  <h1>{% block title %}Edit "{{ post['title'] }}"{% endblock %}</h1>
+{% endblock %}
+
+{% block content %}
+  <form method="post" enctype="multipart/form-data">
+    <label for="title">Title</label>
+    <input name="title" id="title"
+      value="{{ request.form['title'] or post['title'] }}" required>
+    
+    <label for="body">Body</label>
+    <textarea name="body" id="body">{{ request.form['body'] or post['body'] }}</textarea>
+    
+    <label for="image">Image (optional)</label>
+    <input type="file" name="image" id="image" accept="image/*">
+    
+    {% if post['image_filename'] %}
+      <div class="current-image">
+        <p>Current image:</p>
+        <div class="thumbnail-container">
+          <img 
+            src="{{ url_for('static', filename='uploads/' + post['image_filename']) }}" 
+            alt="Post image" 
+            class="thumbnail-img"
+            data-full-img="{{ url_for('static', filename='uploads/' + post['image_filename']) }}"
+            onclick="openModal(this.getAttribute('data-full-img'))"
+          >
+        </div>
+      </div>
+    {% endif %}
+    
+    <input type="submit" value="Save Changes">
+  </form>
+  
+  <hr>
+  
+  <form action="{{ url_for('blog.delete', id=post['id']) }}" method="post" class="delete-form">
+    <input class="danger" type="submit" value="Delete Post" onclick="return confirm('Are you sure you want to delete this post?');">
+  </form>
+{% endblock %}

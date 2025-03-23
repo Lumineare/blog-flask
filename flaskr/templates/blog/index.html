@@ -1,0 +1,47 @@
+{% extends 'base.html' %}
+
+{% block header %}
+  <h1>{% block title %}Posts{% endblock %}</h1>
+  {% if g.user %}
+    <a class="action" href="{{ url_for('blog.create') }}">New Post</a>
+  {% endif %}
+{% endblock %}
+
+{% block content %}
+  {% if posts %}
+    {% for post in posts %}
+      <article class="post">
+        <header>
+          <div>
+            <h1>{{ post['title'] }}</h1>
+            <div class="about">by {{ post['username'] }} on {{ post['created'].strftime('%Y-%m-%d') }}</div>
+          </div>
+          {% if g.user['id'] == post['author_id'] %}
+            <a class="action" href="{{ url_for('blog.update', id=post['id']) }}">Edit</a>
+          {% endif %}
+        </header>
+        
+        {% if post['image_filename'] %}
+          <div class="thumbnail-container">
+            <img 
+              src="{{ url_for('static', filename='uploads/' + post['image_filename']) }}" 
+              alt="Post image" 
+              class="thumbnail-img"
+              data-full-img="{{ url_for('static', filename='uploads/' + post['image_filename']) }}"
+              onclick="openModal(this.getAttribute('data-full-img'))"
+            >
+          </div>
+        {% endif %}
+        
+        <p class="body">{{ post['body'] }}</p>
+      </article>
+      {% if not loop.last %}
+        <hr>
+      {% endif %}
+    {% endfor %}
+  {% else %}
+    <div class="empty-state">
+      <p>No posts yet. {% if g.user %}Create your first post!{% else %}Login to start posting.{% endif %}</p>
+    </div>
+  {% endif %}
+{% endblock %}
