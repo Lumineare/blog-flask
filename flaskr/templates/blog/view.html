@@ -1,0 +1,441 @@
+{% extends 'base.html' %}
+
+{% block header %}
+  <h1>{% block title %}{{ post['title'] }}{% endblock %}</h1>
+  <a class="action" href="{{ url_for('index') }}">Back</a>
+{% endblock %}
+
+{% block content %}
+  <article class="post">
+    <header>
+      <div>
+        <div class="about">by {{ post['username'] }} on {{ post['created'].strftime('%Y-%m-%d') }}</div>
+      </div>
+      {% if g.user and g.user['id'] == post['author_id'] %}
+        <a class="action" href="{{ url_for('blog.update', id=post['id']) }}">Edit</a>
+      {% endif %}
+    </header>
+    
+    {% if post['image_filename'] %}
+      <div class="thumbnail-container">
+        <img 
+          src="{{ url_for('static', filename='uploads/' + post['image_filename']) }}" 
+          alt="Post image" 
+          class="thumbnail-img"
+          data-full-img="{{ url_for('static', filename='uploads/' + post['image_filename']) }}"
+          onclick="openModal(this.getAttribute('data-full-img'))"
+        >
+      </div>
+    {% endif %}
+    
+    <p class="body">{{ post['body'] }}</p>
+    
+    <!-- Voting section -->
+    {% if g.user %}
+      <div class="post-votes">
+        <button id="upvotePost" class="vote-btn upvote {% if user_vote == 1 %}active{% endif %}" data-post-id="{{ post['id'] }}">
+          ↑ Upvote ({{ post['upvotes'] }})
+        </button>
+        <button id="downvotePost" class="vote-btn downvote {% if user_vote == -1 %}active{% endif %}" data-post-id="{{ post['id'] }}">
+          ↓ Downvote ({{ post['downvotes'] }})
+        </button>
+      </div>
+    {% else %}
+      <div class="post-votes">
+        <span>↑ Upvotes: {{ post['upvotes'] }}</span>
+        <span>↓ Downvotes: {{ post['downvotes'] }}</span>
+        <p><a href="{{ url_for('auth.login') }}">Log in to vote</a></p>
+      </div>
+    {% endif %}
+  </article>
+  
+  <hr>
+  
+  <!-- Comments section -->
+  <section class="comments-section">
+    <h2>Comments ({{ comment_count }})</h2>
+    
+    {% if g.user %}
+      <form id="addCommentForm" class="comment-form" action="{{ url_for('comments.add_comment', post_id=post['id']) }}" method="post">
+        <textarea name="body" id="commentBody" placeholder="Add a comment..." required></textarea>
+        <input type="hidden" name="parent_id" id="parentCommentId" value="">
+        <div class="form-actions">
+          <button type="button" id="cancelReply" style="display: none;">Cancel Reply</button>
+          <input type="submit" value="Submit Comment">
+        </div>
+      </form>
+    {% else %}
+      <p><a href="{{ url_for('auth.login') }}">Log in to comment</a></p>
+    {% endif %}
+    
+    <div id="commentsList" class="comments-list">
+      <!-- Comments will be loaded via JavaScript -->
+      <div class="loading-comments">Loading comments...</div>
+    </div>
+  </section>
+  
+  <!-- Comment template for JavaScript -->
+  <template id="commentTemplate">
+    <div class="comment" data-comment-id="">
+      <div class="comment-header">
+        <span class="comment-author"></span>
+        <span class="comment-date"></span>
+      </div>
+      <div class="comment-body"></div>
+      <div class="comment-actions">
+        <div class="comment-votes">
+          <button class="vote-btn upvote-comment">↑ <span class="upvotes-count">0</span></button>
+          <button class="vote-btn downvote-comment">↓ <span class="downvotes-count">0</span></button>
+        </div>
+        <button class="reply-btn">Reply</button>
+        <div class="edit-delete-buttons" style="display: none;">
+          <button class="edit-comment-btn">Edit</button>
+          <form class="delete-comment-form" method="post" style="display: inline;">
+            <button type="submit" class="delete-comment-btn">Delete</button>
+          </form>
+        </div>
+      </div>
+      <div class="edit-form" style="display: none;">
+        <textarea class="edit-comment-body"></textarea>
+        <div class="form-actions">
+          <button type="button" class="cancel-edit-btn">Cancel</button>
+          <button type="button" class="submit-edit-btn">Save</button>
+        </div>
+      </div>
+      <div class="comment-replies"></div>
+    </div>
+  </template>
+  
+  <script>
+    document.addEventListener('DOMContentLoaded', function() {
+      const postId = {{ post['id'] }};
+      const currentUserId = {% if g.user %}{{ g.user['id'] }}{% else %}null{% endif %};
+      const commentsList = document.getElementById('commentsList');
+      const commentTemplate = document.getElementById('commentTemplate');
+      const addCommentForm = document.getElementById('addCommentForm');
+      const parentCommentId = document.getElementById('parentCommentId');
+      const cancelReplyBtn = document.getElementById('cancelReply');
+      
+      // Load comments
+      fetchComments();
+      
+      // Set up voting buttons for post
+      if (document.getElementById('upvotePost')) {
+        document.getElementById('upvotePost').addEventListener('click', function() {
+          const voteType = this.classList.contains('active') ? 0 : 1;
+          voteOnPost(postId, voteType);
+        });
+      }
+      
+      if (document.getElementById('downvotePost')) {
+        document.getElementById('downvotePost').addEventListener('click', function() {
+          const voteType = this.classList.contains('active') ? 0 : -1;
+          voteOnPost(postId, voteType);
+        });
+      }
+      
+      // Set up reply form functionality
+      if (cancelReplyBtn) {
+        cancelReplyBtn.addEventListener('click', function() {
+          parentCommentId.value = '';
+          addCommentForm.setAttribute('action', `${postId}/comment`);
+          this.style.display = 'none';
+          addCommentForm.scrollIntoView({ behavior: 'smooth' });
+        });
+      }
+      
+      function fetchComments() {
+        fetch(`/post/${postId}/comments`)
+          .then(response => response.json())
+          .then(comments => {
+            commentsList.innerHTML = '';
+            
+            // Group comments by parent_id
+            const commentsByParent = {};
+            comments.forEach(comment => {
+              if (!commentsByParent[comment.parent_id]) {
+                commentsByParent[comment.parent_id] = [];
+              }
+              commentsByParent[comment.parent_id].push(comment);
+            });
+            
+            // First render top-level comments
+            const topLevelComments = commentsByParent[null] || [];
+            topLevelComments.forEach(comment => {
+              const commentElement = renderComment(comment);
+              commentsList.appendChild(commentElement);
+              
+              // Then recursively render replies
+              renderReplies(comment.id, commentElement.querySelector('.comment-replies'), commentsByParent);
+            });
+          })
+          .catch(error => {
+            console.error('Error fetching comments:', error);
+            commentsList.innerHTML = '<p>Error loading comments. Please try again later.</p>';
+          });
+      }
+      
+      function renderReplies(parentId, container, commentsByParent) {
+        const replies = commentsByParent[parentId] || [];
+        replies.forEach(reply => {
+          const replyElement = renderComment(reply);
+          container.appendChild(replyElement);
+          
+          // Recursively render replies to this reply
+          renderReplies(reply.id, replyElement.querySelector('.comment-replies'), commentsByParent);
+        });
+      }
+      
+      function renderComment(comment) {
+        const clone = document.importNode(commentTemplate.content, true);
+        const commentElement = clone.querySelector('.comment');
+        
+        commentElement.dataset.commentId = comment.id;
+        commentElement.querySelector('.comment-author').textContent = comment.username;
+        commentElement.querySelector('.comment-date').textContent = new Date(comment.created).toLocaleDateString();
+        commentElement.querySelector('.comment-body').textContent = comment.body;
+        commentElement.querySelector('.upvotes-count').textContent = comment.upvotes;
+        commentElement.querySelector('.downvotes-count').textContent = comment.downvotes;
+        
+        // Set up edit form
+        const editForm = commentElement.querySelector('.edit-form');
+        editForm.querySelector('.edit-comment-body').value = comment.body;
+        
+        // Set up delete form
+        const deleteForm = commentElement.querySelector('.delete-comment-form');
+        deleteForm.action = `/comment/${comment.id}/delete`;
+        
+        // Show edit/delete buttons if comment is by current user
+        if (currentUserId === comment.author_id) {
+          commentElement.querySelector('.edit-delete-buttons').style.display = 'inline-block';
+        }
+        
+        // Set active class for votes
+        if (comment.user_vote === 1) {
+          commentElement.querySelector('.upvote-comment').classList.add('active');
+        } else if (comment.user_vote === -1) {
+          commentElement.querySelector('.downvote-comment').classList.add('active');
+        }
+        
+        // Set up event listeners
+        if (currentUserId) {
+          // Reply button
+          commentElement.querySelector('.reply-btn').addEventListener('click', function() {
+            parentCommentId.value = comment.id;
+            cancelReplyBtn.style.display = 'inline-block';
+            addCommentForm.setAttribute('action', `/post/${postId}/comment`);
+            document.getElementById('commentBody').focus();
+            addCommentForm.scrollIntoView({ behavior: 'smooth' });
+          });
+          
+          // Edit button
+          const editBtn = commentElement.querySelector('.edit-comment-btn');
+          if (editBtn) {
+            editBtn.addEventListener('click', function() {
+              editForm.style.display = 'block';
+              commentElement.querySelector('.comment-body').style.display = 'none';
+              commentElement.querySelector('.comment-actions').style.display = 'none';
+              editForm.querySelector('.edit-comment-body').focus();
+            });
+          }
+          
+          // Cancel edit button
+          editForm.querySelector('.cancel-edit-btn').addEventListener('click', function() {
+            editForm.style.display = 'none';
+            commentElement.querySelector('.comment-body').style.display = 'block';
+            commentElement.querySelector('.comment-actions').style.display = 'block';
+          });
+          
+          // Submit edit button
+          editForm.querySelector('.submit-edit-btn').addEventListener('click', function() {
+            const body = editForm.querySelector('.edit-comment-body').value;
+            if (body.trim()) {
+              const formData = new FormData();
+              formData.append('body', body);
+              
+              fetch(`/comment/${comment.id}/update`, {
+                method: 'POST',
+                body: formData
+              }).then(() => {
+                window.location.reload();
+              });
+            }
+          });
+          
+          // Vote buttons
+          commentElement.querySelector('.upvote-comment').addEventListener('click', function() {
+            const voteType = this.classList.contains('active') ? 0 : 1;
+            voteOnComment(comment.id, voteType);
+          });
+          
+          commentElement.querySelector('.downvote-comment').addEventListener('click', function() {
+            const voteType = this.classList.contains('active') ? 0 : -1;
+            voteOnComment(comment.id, voteType);
+          });
+        } else {
+          // If not logged in, disable interactive elements
+          commentElement.querySelector('.reply-btn').addEventListener('click', function() {
+            window.location.href = '/auth/login';
+          });
+          
+          const voteButtons = commentElement.querySelectorAll('.vote-btn');
+          voteButtons.forEach(button => {
+            button.addEventListener('click', function() {
+              window.location.href = '/auth/login';
+            });
+          });
+        }
+        
+        return commentElement;
+      }
+      
+      function voteOnPost(postId, voteType) {
+        fetch(`/post/${postId}/vote`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ vote_type: voteType })
+        })
+        .then(response => response.json())
+        .then(data => {
+          // Update UI
+          document.getElementById('upvotePost').textContent = `↑ Upvote (${data.upvotes})`;
+          document.getElementById('downvotePost').textContent = `↓ Downvote (${data.downvotes})`;
+          
+          document.getElementById('upvotePost').classList.toggle('active', data.user_vote === 1);
+          document.getElementById('downvotePost').classList.toggle('active', data.user_vote === -1);
+        })
+        .catch(error => console.error('Error voting on post:', error));
+      }
+      
+      function voteOnComment(commentId, voteType) {
+        fetch(`/comment/${commentId}/vote`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ vote_type: voteType })
+        })
+        .then(response => response.json())
+        .then(data => {
+          // Update UI
+          const commentElement = document.querySelector(`.comment[data-comment-id="${commentId}"]`);
+          commentElement.querySelector('.upvotes-count').textContent = data.upvotes;
+          commentElement.querySelector('.downvotes-count').textContent = data.downvotes;
+          
+          commentElement.querySelector('.upvote-comment').classList.toggle('active', data.user_vote === 1);
+          commentElement.querySelector('.downvote-comment').classList.toggle('active', data.user_vote === -1);
+        })
+        .catch(error => console.error('Error voting on comment:', error));
+      }
+    });
+  </script>
+  
+  <style>
+    .post-votes {
+      margin: 1rem 0;
+    }
+    
+    .vote-btn {
+      background: #f0f0f0;
+      border: 1px solid #ddd;
+      padding: 5px 10px;
+      margin-right: 10px;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    
+    .vote-btn.active {
+      background: var(--primary-color);
+      color: white;
+    }
+    
+    .comments-section {
+      margin-top: 2rem;
+    }
+    
+    .comment-form {
+      margin-bottom: 1.5rem;
+    }
+    
+    .comment-form textarea {
+      width: 100%;
+      min-height: 80px;
+      margin-bottom: 0.5rem;
+      padding: 0.5rem;
+      border: 1px solid var(--border-color);
+      border-radius: 4px;
+    }
+    
+    .form-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 10px;
+    }
+    
+    .comments-list {
+      margin-top: 1rem;
+    }
+    
+    .comment {
+      border: 1px solid var(--border-color);
+      border-radius: 4px;
+      padding: 1rem;
+      margin-bottom: 1rem;
+      background: #f9f9f9;
+    }
+    
+    .comment-header {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 0.5rem;
+      font-size: 0.9rem;
+    }
+    
+    .comment-author {
+      font-weight: bold;
+    }
+    
+    .comment-date {
+      color: #666;
+    }
+    
+    .comment-body {
+      margin-bottom: 0.5rem;
+      white-space: pre-line;
+    }
+    
+    .comment-actions {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 0.85rem;
+    }
+    
+    .comment-votes {
+      display: flex;
+      gap: 5px;
+    }
+    
+    .edit-form textarea {
+      width: 100%;
+      min-height: 80px;
+      margin-bottom: 0.5rem;
+      padding: 0.5rem;
+      border: 1px solid var(--border-color);
+      border-radius: 4px;
+    }
+    
+    .comment-replies {
+      margin-left: 2rem;
+      margin-top: 1rem;
+    }
+    
+    .loading-comments {
+      text-align: center;
+      padding: 1rem;
+      color: #666;
+    }
+  </style>
+{% endblock %}

@@ -1,0 +1,88 @@
+{% extends 'base.html' %}
+
+{% block header %}
+  <h1>{% block title %}Search Results for "{{ query }}"{% endblock %}</h1>
+{% endblock %}
+
+{% block content %}
+  <div class="search-container">
+    <form class="search-form" action="{{ url_for('search.search') }}" method="get">
+      <input type="text" name="q" value="{{ query }}" placeholder="Search..." required>
+      <div class="search-type-selector">
+        <label>
+          <input type="radio" name="type" value="posts" {% if search_type == 'posts' %}checked{% endif %}>
+          Posts
+        </label>
+        <label>
+          <input type="radio" name="type" value="users" {% if search_type == 'users' %}checked{% endif %}>
+          Users
+        </label>
+      </div>
+      <button type="submit" class="search-button">Search</button>
+    </form>
+  </div>
+
+  <div class="search-results">
+    {% if query %}
+      {% if results %}
+        <h2>{{ results|length }} result{{ 's' if results|length != 1 else '' }} found</h2>
+        
+        {% if search_type == 'posts' %}
+          {% for post in results %}
+            <article class="post search-result">
+              <header>
+                <div>
+                  <h2><a href="{{ url_for('blog.view', id=post['id']) }}">{{ post['title'] }}</a></h2>
+                  <div class="about">by {{ post['username'] }} on {{ post['created'].strftime('%Y-%m-%d') }}</div>
+                </div>
+              </header>
+              
+              {% if post['image_filename'] %}
+                <div class="thumbnail-container">
+                  <img 
+                    src="{{ url_for('static', filename='uploads/' + post['image_filename']) }}" 
+                    alt="Post image" 
+                    class="thumbnail-img"
+                    data-full-img="{{ url_for('static', filename='uploads/' + post['image_filename']) }}"
+                    onclick="openModal(this.getAttribute('data-full-img'))"
+                  >
+                </div>
+              {% endif %}
+              
+              <div class="post-body-preview">
+                {{ post['body']|truncate(200) }}
+              </div>
+              
+              <div class="post-stats">
+                <span class="post-votes">
+                  <span class="upvotes">{{ post['upvotes'] }} ▲</span>
+                  <span class="downvotes">{{ post['downvotes'] }} ▼</span>
+                </span>
+                <a href="{{ url_for('blog.view', id=post['id']) }}" class="read-more">Read more</a>
+              </div>
+            </article>
+            {% if not loop.last %}<hr>{% endif %}
+          {% endfor %}
+        {% elif search_type == 'users' %}
+          <div class="user-results">
+            {% for user in results %}
+              <div class="user-card">
+                <h3>{{ user['username'] }}</h3>
+                <a href="{{ url_for('search.search') }}?q={{ user['username'] }}&type=posts" class="user-posts-link">View posts by this user</a>
+              </div>
+              {% if not loop.last %}<hr>{% endif %}
+            {% endfor %}
+          </div>
+        {% endif %}
+      {% else %}
+        <div class="no-results">
+          <p>No {{ search_type }} found matching "{{ query }}".</p>
+        </div>
+      {% endif %}
+    {% else %}
+      <div class="search-instructions">
+        <p>Enter a search term above to find posts or users.</p>
+      </div>
+    {% endif %}
+  </div>
+{% endblock %}

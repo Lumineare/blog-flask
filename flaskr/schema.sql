@@ -18,12 +18,14 @@ CREATE TABLE IF NOT EXISTS comment (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   post_id INTEGER NOT NULL,
   author_id INTEGER NOT NULL,
+  parent_id INTEGER,
   body TEXT NOT NULL,
   created TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   upvotes INTEGER DEFAULT 0,
   downvotes INTEGER DEFAULT 0,
   FOREIGN KEY (post_id) REFERENCES post (id),
-  FOREIGN KEY (author_id) REFERENCES user (id)
+  FOREIGN KEY (author_id) REFERENCES user (id),
+  FOREIGN KEY (parent_id) REFERENCES comment (id)
 );
 
 -- Buat tabel untuk reaksi komentar
