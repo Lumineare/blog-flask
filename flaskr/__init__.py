@@ -44,5 +44,14 @@ def create_app(test_config=None):
     from . import blog
     app.register_blueprint(blog.bp)
     app.add_url_rule('/', endpoint='index')
+    
+    from . import comments
+    app.register_blueprint(comments.bp)
+    
+    from . import votes
+    app.register_blueprint(votes.bp)
+    
+    from . import search
+    app.register_blueprint(search.bp)
 
     return app
